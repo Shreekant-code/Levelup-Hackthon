@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { api } from '../utils/api'
 
 const AuthContext = createContext(null)
@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }) => {
     return { userId: payload.userId }
   }, [token])
 
-  const persistToken = (value) => {
+  const persistToken = useCallback((value) => {
     if (!value) {
       localStorage.removeItem('token')
       setToken(null)
@@ -47,9 +47,9 @@ export const AuthProvider = ({ children }) => {
 
     localStorage.setItem('token', value)
     setToken(value)
-  }
+  }, [])
 
-  const refreshProfile = async () => {
+  const refreshProfile = useCallback(async () => {
     if (!token) {
       setProfile(null)
       return { ok: false, status: 401 }
@@ -66,15 +66,15 @@ export const AuthProvider = ({ children }) => {
     }
 
     return response
-  }
+  }, [token, persistToken])
 
   useEffect(() => {
     refreshProfile()
-  }, [token])
+  }, [refreshProfile])
 
   const user = useMemo(() => profile || tokenUser, [profile, tokenUser])
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const result = await api.post('/api/auth/login', { email, password })
 
     if (!result.ok) {
@@ -88,9 +88,9 @@ export const AuthProvider = ({ children }) => {
     setProfile(result.data.user || null)
     await refreshProfile()
     return result.data
-  }
+  }, [persistToken, refreshProfile])
 
-  const register = async (payload) => {
+  const register = useCallback(async (payload) => {
     const result = await api.post('/api/auth/register', payload)
 
     if (!result.ok) throw new Error(result.data?.message || 'Signup failed')
@@ -100,11 +100,11 @@ export const AuthProvider = ({ children }) => {
     setProfile(result.data.user || null)
     await refreshProfile()
     return result.data
-  }
+  }, [persistToken, refreshProfile])
 
-  const logout = () => persistToken(null)
+  const logout = useCallback(() => persistToken(null), [persistToken])
 
-  const authFetch = async (path, options = {}) => {
+  const authFetch = useCallback(async (path, options = {}) => {
     if (!token || !isTokenValid(token)) {
       logout()
       throw new Error('Session expired. Please login again.')
@@ -124,7 +124,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     return result
-  }
+  }, [token, logout])
 
   const value = {
     user,

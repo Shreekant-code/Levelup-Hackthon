@@ -16,6 +16,7 @@ const OPTIONAL_TYPES = new Set(["task_complete", "streak_update", "task_added", 
 
 let transporter = null;
 let transportInitialized = false;
+let emailServiceVerified = false;
 
 const getEnv = (...keys) => {
   for (const key of keys) {
@@ -33,6 +34,9 @@ const getTransportConfig = () => ({
   host: getEnv("SMTP_HOST", "EMAIL_HOST", "EMAIL_SMTP_HOST"),
   port: Number(getEnv("SMTP_PORT", "EMAIL_PORT", "EMAIL_SMTP_PORT") || 587),
   secure: String(getEnv("SMTP_SECURE", "EMAIL_SECURE") || "false").toLowerCase() === "true",
+  connectionTimeout: 5000,
+  greetingTimeout: 5000,
+  socketTimeout: 8000,
   auth: {
     user: getEnv("EMAIL_USER", "SMTP_USER"),
     pass: getEnv("EMAIL_PASS", "SMTP_PASS"),
@@ -252,12 +256,14 @@ export const initEmailServiceHealth = async () => {
 
     if (!emailUser || !emailPass) {
       console.warn("Email config warning: EMAIL_USER or EMAIL_PASS missing. Email delivery disabled.");
+      emailServiceVerified = false;
       return { verified: false, reason: "credentials_missing" };
     }
 
     const tx = await getTransporter();
     if (!tx) {
       console.warn("Email server verification failed: nodemailer unavailable.");
+      emailServiceVerified = false;
       return { verified: false, reason: "nodemailer_unavailable" };
     }
 
@@ -267,8 +273,10 @@ export const initEmailServiceHealth = async () => {
       console.log("Email server connected successfully");
     }
 
+    emailServiceVerified = true;
     return { verified: true };
   } catch (error) {
+    emailServiceVerified = false;
     console.warn("Email server verification failed", error?.message || error);
     return { verified: false, reason: "verify_failed" };
   }
@@ -284,6 +292,10 @@ export const sendProductivityEmail = async ({
   try {
     if (!to || !type || !canEmail()) {
       return { sent: false, reason: "email_not_configured_or_missing_data" };
+    }
+
+    if (!emailServiceVerified) {
+      return { sent: false, reason: "email_service_unverified" };
     }
 
     const policy = shouldSendByPolicy({ to, type, additionalData });

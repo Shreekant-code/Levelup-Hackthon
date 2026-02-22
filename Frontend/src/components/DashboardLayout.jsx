@@ -39,6 +39,8 @@ const calculateStreakFromLogs = (logs) => {
   return streak
 }
 
+const asArray = (value) => (Array.isArray(value) ? value : [])
+
 const useDashboardData = () => {
   const { addToast } = useToast()
   const { user, refreshProfile } = useAuth()
@@ -69,12 +71,13 @@ const useDashboardData = () => {
       setError('')
 
       try {
-        const [taskRes, skillRes, studyRes, productivityRes] = await Promise.all([
-          api.get('/api/tasks'),
-          api.get('/api/skills'),
-          api.get('/api/study-log'),
-          api.get('/api/productivity'),
-        ])
+    const [taskRes, skillRes, studyRes, productivityRes] = await Promise.all([
+      api.get('/api/tasks'),
+      api.get('/api/skills'),
+      api.get('/api/study-log'),
+      api.get('/api/productivity'),
+    ])
+    const roadmapRes = await api.get('/api/roadmap/latest')
 
         if (!mountedRef.current) return
 
@@ -90,12 +93,18 @@ const useDashboardData = () => {
           return
         }
 
-        setTasks(taskRes.data || [])
-        setSkills(skillRes.data || [])
-        setStudyLogs(studyRes.data || [])
-        setProductivity(productivityRes.data || [])
+    setTasks(asArray(taskRes.data))
+    setSkills(asArray(skillRes.data))
+    setStudyLogs(asArray(studyRes.data))
+    setProductivity(asArray(productivityRes.data))
+    if (roadmapRes.ok) {
+      setRoadmap(asArray(roadmapRes.data?.roadmap))
+      setOptimizationMeta(roadmapRes.data?.optimizationMeta || null)
+      setAnalysisSummary(roadmapRes.data?.analysisSummary || null)
+      setChartData(roadmapRes.data?.chartData || null)
+    }
 
-        await refreshProfile()
+    await refreshProfile()
       } catch (err) {
         if (!mountedRef.current) return
         setLoading(false)

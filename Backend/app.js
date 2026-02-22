@@ -15,9 +15,20 @@ dotenv.config();
 
 const app = express();
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(cors({
-  origin: 'http://localhost:5173',
-  credentials: true
+  origin(origin, callback) {
+    // Allow non-browser requests (no Origin) and configured frontend origins.
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS blocked for this origin'));
+  },
+  credentials: true,
 }));
 app.use(express.json());
 
@@ -32,6 +43,14 @@ await connectDB().catch((error) => {
 
 if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
   console.warn('Email config warning: EMAIL_USER or EMAIL_PASS is missing.');
+}
+
+if (!process.env.GEMINI_API_KEY && !process.env.API_KEY) {
+  console.warn('Gemini config warning: GEMINI_API_KEY/API_KEY is missing. Roadmap generation will use fallback mode.');
+}
+
+if (!process.env.GEMINI_MODEL) {
+  console.warn('Gemini config warning: GEMINI_MODEL not set. Default model will be used.');
 }
 
 await initEmailServiceHealth();

@@ -6,6 +6,13 @@ import StudyLog from '../Schema/StudyLog.js'
 import ProductivityScore from '../Schema/Productivity.js'
 import { notifyUserEvent, getUserNotificationSummary } from '../Utils/notificationService.js'
 
+const ROADMAP_DEBUG = String(process.env.ROADMAP_DEBUG || '').toLowerCase() === 'true'
+
+const debugLog = (...args) => {
+  if (!ROADMAP_DEBUG) return
+  console.log(...args)
+}
+
 const motivationLines = [
   'Small consistent wins compound into major outcomes.',
   'Protect your focus block and execute the highest-value task first.',
@@ -801,9 +808,21 @@ const generateWithGemini = async ({ prompt, fallbackRoadmap }) => {
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY
   const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash'
 
-  if (!apiKey) return fallbackRoadmap
+  if (!apiKey) {
+    debugLog('[RoadmapDebug] Missing GEMINI_API_KEY/API_KEY. Using fallback roadmap.')
+    return {
+      roadmap: fallbackRoadmap,
+      source: 'fallback',
+      reason: 'missing_api_key',
+      model,
+      status: null,
+    }
+  }
 
   try {
+    debugLog('[RoadmapDebug] Gemini model:', model)
+    debugLog('[RoadmapDebug] Prompt preview:', String(prompt).slice(0, 500))
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
@@ -819,16 +838,74 @@ const generateWithGemini = async ({ prompt, fallbackRoadmap }) => {
       }
     )
 
-    if (!response.ok) return fallbackRoadmap
+    console.log('Gemini Response Status:', response.status)
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      debugLog('[RoadmapDebug] Gemini non-OK response body:', errorText.slice(0, 800))
+      return {
+        roadmap: fallbackRoadmap,
+        source: 'fallback',
+        reason: 'gemini_non_ok',
+        model,
+        status: response.status,
+      }
+    }
 
     const data = await response.json()
+    if (!Array.isArray(data?.candidates)) {
+      debugLog('[RoadmapDebug] Gemini candidates missing/invalid. Using fallback.')
+      return {
+        roadmap: fallbackRoadmap,
+        source: 'fallback',
+        reason: 'missing_candidates',
+        model,
+        status: response.status,
+      }
+    }
+
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!text) return fallbackRoadmap
+    console.log('Raw Gemini Output:', text)
+    if (!text) {
+      debugLog('[RoadmapDebug] Empty Gemini text output. Using fallback.')
+      return {
+        roadmap: fallbackRoadmap,
+        source: 'fallback',
+        reason: 'missing_text',
+        model,
+        status: response.status,
+      }
+    }
 
     const parsed = parseModelRoadmap(text)
-    return parsed || fallbackRoadmap
+    if (!parsed) {
+      debugLog('[RoadmapDebug] parseModelRoadmap failed. Using fallback.')
+      return {
+        roadmap: fallbackRoadmap,
+        source: 'fallback',
+        reason: 'parse_failed',
+        model,
+        status: response.status,
+      }
+    }
+
+    debugLog('[RoadmapDebug] Parsed roadmap length:', parsed.length)
+    return {
+      roadmap: parsed,
+      source: 'gemini',
+      reason: null,
+      model,
+      status: response.status,
+    }
   } catch {
-    return fallbackRoadmap
+    debugLog('[RoadmapDebug] Gemini request threw error. Using fallback.')
+    return {
+      roadmap: fallbackRoadmap,
+      source: 'fallback',
+      reason: 'request_failed',
+      model,
+      status: null,
+    }
   }
 }
 
@@ -946,7 +1023,15 @@ const maybeSendEmails = async ({
 
 export const generateRoadmap = async (req, res) => {
   try {
+    console.log('User ID:', req.user)
     const userId = req.user
+    if (!userId) {
+      return res.status(401).json({
+        message: 'Unauthorized: userId missing in request context',
+        code: 'USER_ID_MISSING',
+      })
+    }
+
     const RoadmapCollection = mongoose.connection.collection('roadmaps')
 
     const [user, skills, latestProductivityScore, tasks, studyLogs, previousRoadmapDoc, roadmapHistory, productivityHistory] = await Promise.all([
@@ -959,6 +1044,10 @@ export const generateRoadmap = async (req, res) => {
       RoadmapCollection.find({ userId }).sort({ createdAt: -1 }).limit(5).toArray(),
       ProductivityScore.find({ userId }).sort({ date: -1 }).limit(7),
     ])
+
+    debugLog('[RoadmapDebug] Fetched user:', Boolean(user))
+    debugLog('[RoadmapDebug] Skill count:', skills.length)
+    debugLog('[RoadmapDebug] Latest productivity score found:', Boolean(latestProductivityScore))
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' })
@@ -999,9 +1088,15 @@ export const generateRoadmap = async (req, res) => {
       tracking,
     })
 
-    let roadmap = await generateWithGemini({ prompt, fallbackRoadmap: initialFallbackRoadmap })
+    const geminiResult = await generateWithGemini({ prompt, fallbackRoadmap: initialFallbackRoadmap })
+    let roadmap = geminiResult.roadmap
     let optimizationVersion = 'initial'
     let improvementStrategy = 'Adaptive generation based on roadmap tracking, skill gaps, and reinforcement signals.'
+    let usedFallback = geminiResult.source !== 'gemini'
+
+    debugLog('[RoadmapDebug] Gemini source:', geminiResult.source)
+    debugLog('[RoadmapDebug] Gemini reason:', geminiResult.reason)
+    debugLog('[RoadmapDebug] Gemini status:', geminiResult.status)
 
     const repeatedFailures = roadmapHistory
       .map((item) => parseStoredRoadmap(item.generatedPlan))
@@ -1014,6 +1109,7 @@ export const generateRoadmap = async (req, res) => {
     const shouldOptimize = poorQuality || lowCompletion || repeatedFailures >= 2 || highSkillGap
 
     if (shouldOptimize) {
+      usedFallback = true
       roadmap = buildAdaptiveRoadmap({
         user,
         skillInsights,
@@ -1044,6 +1140,11 @@ export const generateRoadmap = async (req, res) => {
       predictedSuccessRate,
       roadmapFollowed: tracking.roadmapFollowed,
       improvementStrategy,
+      generationSource: geminiResult.source,
+      fallbackReason: geminiResult.reason,
+      geminiStatus: geminiResult.status,
+      geminiModel: geminiResult.model,
+      usedFallback,
     }
 
     const analysisSummary = buildAnalysisSummary({
@@ -1063,15 +1164,24 @@ export const generateRoadmap = async (req, res) => {
 
     const isStarter = !latestProductivityScore
 
+    debugLog('[RoadmapDebug] Parsed/Final roadmap preview:', JSON.stringify(roadmap?.slice?.(0, 2) || roadmap))
+    debugLog('[RoadmapDebug] Used fallback:', usedFallback)
+    debugLog('[RoadmapDebug] Final roadmap length:', Array.isArray(roadmap) ? roadmap.length : 0)
+
     const levelUpPossible = Number(user.xp || 0) % 200 >= 150
-    await maybeSendEmails({
-      user,
-      tracking,
-      optimizationVersion,
-      levelUpPossible,
-      predictedSuccessRate,
-      improvementStrategy,
-    })
+    try {
+      await maybeSendEmails({
+        user,
+        tracking,
+        optimizationVersion,
+        levelUpPossible,
+        predictedSuccessRate,
+        improvementStrategy,
+      })
+    } catch (emailError) {
+      // Email failures must not block roadmap delivery.
+      console.warn('[RoadmapEmailWarning]', emailError?.message || emailError)
+    }
 
     await RoadmapCollection.insertOne({
       userId,
@@ -1084,7 +1194,46 @@ export const generateRoadmap = async (req, res) => {
     const notificationCenter = await getUserNotificationSummary(userId, 5)
 
     return res.status(200).json({ analysisSummary, chartData, roadmap, isStarter, optimizationMeta, notificationCenter })
-  } catch {
+  } catch (error) {
+    console.error('[RoadmapError]', error?.message || error)
+    return res.status(500).json({ message: 'Server error' })
+  }
+}
+
+export const getLatestRoadmap = async (req, res) => {
+  try {
+    const userId = req.user
+    if (!userId) {
+      return res.status(401).json({
+        message: 'Unauthorized: userId missing in request context',
+        code: 'USER_ID_MISSING',
+      })
+    }
+
+    const RoadmapCollection = mongoose.connection.collection('roadmaps')
+    const latest = await RoadmapCollection.find({ userId }).sort({ createdAt: -1 }).limit(1).next()
+
+    if (!latest) {
+      return res.status(200).json({
+        roadmap: [],
+        analysisSummary: null,
+        chartData: null,
+        optimizationMeta: null,
+        isStarter: true,
+      })
+    }
+
+    const parsed = parseStoredRoadmap(latest.generatedPlan) || {}
+
+    return res.status(200).json({
+      roadmap: Array.isArray(parsed.roadmap) ? parsed.roadmap : [],
+      analysisSummary: parsed.analysisSummary || null,
+      chartData: parsed.chartData || null,
+      optimizationMeta: parsed.optimizationMeta || null,
+      isStarter: Boolean(parsed.isStarter),
+    })
+  } catch (error) {
+    console.error('[RoadmapLatestError]', error?.message || error)
     return res.status(500).json({ message: 'Server error' })
   }
 }

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { DotLottieReact } from '@lottiefiles/dotlottie-react'
 import { TypeAnimation } from 'react-type-animation'
@@ -11,6 +11,7 @@ import HowFutureMEWorksModal, {
 
 export const Home = () => {
   const [isHowItWorksOpen, setIsHowItWorksOpen] = useState(() => !getHowItWorksDismissed())
+  const [canRenderLottie, setCanRenderLottie] = useState(false)
 
   const particles = useMemo(
     () =>
@@ -28,6 +29,11 @@ export const Home = () => {
   const handleCloseHowItWorks = useCallback(() => {
     dismissHowItWorks()
     setIsHowItWorksOpen(false)
+  }, [])
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setCanRenderLottie(true))
+    return () => cancelAnimationFrame(raf)
   }, [])
 
   return (
@@ -134,7 +140,9 @@ export const Home = () => {
           <div className="absolute inset-0 animate-pulse rounded-full bg-blue-500/10 blur-[40px]" />
 
           <div className="h-80 w-80 drop-shadow-[0_0_28px_rgba(34,211,238,0.2)] md:h-[550px] md:w-[550px] lg:h-[650px] lg:w-[650px]">
-            <DotLottieReact src="https://lottie.host/54c8632d-1074-49e3-a7b8-e60fc6d07d9c/uOpuYNoYvt.lottie" loop autoplay />
+            {canRenderLottie ? (
+              <DotLottieReact src="https://lottie.host/54c8632d-1074-49e3-a7b8-e60fc6d07d9c/uOpuYNoYvt.lottie" loop autoplay />
+            ) : null}
           </div>
 
           <motion.div
