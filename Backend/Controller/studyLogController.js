@@ -1,6 +1,6 @@
 import StudyLog from '../Schema/StudyLog.js'
 import User from '../Schema/User.js'
-import { notifyUserEvent } from '../utils/notificationService.js'
+import { notifyUserEvent } from '../Utils/notificationService.js'
 
 const normalizeDate = (value) => {
   const date = new Date(value)

@@ -1,6 +1,6 @@
 import User from "../Schema/User.js";
 import Task from "../Schema/Task.js";
-import { notifyUserEvent } from "../utils/notificationService.js";
+import { notifyUserEvent } from "../Utils/notificationService.js";
 
 const difficultyXpMap = {
   easy: 20,

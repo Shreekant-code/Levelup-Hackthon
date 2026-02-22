@@ -1,6 +1,6 @@
 import Task from "../Schema/Task.js";
 import User from "../Schema/User.js";
-import { notifyUserEvent } from "../utils/notificationService.js";
+import { notifyUserEvent } from "../Utils/notificationService.js";
 
 const calculatePriorityScore = (weaknessLevel, deadline) => {
   const now = new Date();

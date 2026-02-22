@@ -1,6 +1,6 @@
 import Skill from "../Schema/Skill.js";
 import User from "../Schema/User.js";
-import { notifyUserEvent } from "../utils/notificationService.js";
+import { notifyUserEvent } from "../Utils/notificationService.js";
 
 export const createSkill = async (req, res) => {
   try {

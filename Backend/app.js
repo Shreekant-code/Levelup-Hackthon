@@ -9,7 +9,7 @@ import productivityRoutes from './Routes/productivityRoutes.js';
 import skillRoutes from './Routes/skillRoutes.js';
 import roadmapRoutes from './Routes/roadmapRoutes.js';
 import { initEmailScheduler } from './Scheduler/emailScheduler.js';
-import { initEmailServiceHealth } from './utils/emailService.js';
+import { initEmailServiceHealth } from './Utils/emailService.js';
 
 dotenv.config();
 

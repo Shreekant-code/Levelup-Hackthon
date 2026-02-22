@@ -4,7 +4,7 @@ import Skill from '../Schema/Skill.js'
 import Task from '../Schema/Task.js'
 import StudyLog from '../Schema/StudyLog.js'
 import ProductivityScore from '../Schema/Productivity.js'
-import { notifyUserEvent, getUserNotificationSummary } from '../utils/notificationService.js'
+import { notifyUserEvent, getUserNotificationSummary } from '../Utils/notificationService.js'
 
 const motivationLines = [
   'Small consistent wins compound into major outcomes.',
