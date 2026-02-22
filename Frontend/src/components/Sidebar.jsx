@@ -1,34 +1,35 @@
-import { useEffect, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 import { Flame, LogOut, Sparkles, Star } from 'lucide-react'
 
 const Sidebar = ({ open, setOpen, navItems, userName, xp, level, streak, onLogout }) => {
   const sidebarRef = useRef(null)
+  const closeSidebar = useCallback(() => setOpen(false), [setOpen])
 
   useEffect(() => {
     const onMouseDown = (event) => {
       if (!open) return
       if (sidebarRef.current && !sidebarRef.current.contains(event.target)) {
-        setOpen(false)
+        closeSidebar()
       }
     }
 
     document.addEventListener('mousedown', onMouseDown)
     return () => document.removeEventListener('mousedown', onMouseDown)
-  }, [open, setOpen])
+  }, [open, closeSidebar])
 
-  const xpProgress = Math.max(0, Math.min(100, ((xp % 200) / 200) * 100))
+  const xpProgress = useMemo(() => Math.max(0, Math.min(100, ((xp % 200) / 200) * 100)), [xp])
 
   return (
     <>
       {open ? <div className="fixed inset-0 z-40 bg-black/45 md:hidden" /> : null}
       <aside
         ref={sidebarRef}
-        className={`fixed left-0 top-0 z-50 h-full w-72 p-4 transition-transform duration-300 ease-out md:translate-x-0 ${
+        className={`fixed left-0 top-0 z-50 h-full w-72 p-4 transition-transform duration-200 ease-out will-change-transform md:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="h-full overflow-hidden rounded-3xl border border-white/10 bg-neutral-900/80 backdrop-blur-xl shadow-[0_0_45px_rgba(59,130,246,0.14)]">
+        <div className="h-full overflow-hidden rounded-3xl border border-white/10 bg-neutral-900/80 backdrop-blur-md shadow-[0_0_24px_rgba(59,130,246,0.14)]">
           <div className="border-b border-white/10 p-4">
             <p className="text-[11px] uppercase tracking-[0.2em] text-neutral-400">FutureME</p>
             <h2 className="mt-1 truncate text-lg font-semibold">{userName || 'Student'}</h2>
@@ -55,7 +56,7 @@ const Sidebar = ({ open, setOpen, navItems, userName, xp, level, streak, onLogou
                 key={item.to}
                 to={item.to}
                 end={item.end}
-                onClick={() => setOpen(false)}
+                onClick={closeSidebar}
                 className={({ isActive }) =>
                   `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all ${
                     isActive
@@ -88,4 +89,4 @@ const Sidebar = ({ open, setOpen, navItems, userName, xp, level, streak, onLogou
   )
 }
 
-export default Sidebar
+export default memo(Sidebar)

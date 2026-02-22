@@ -1,5 +1,6 @@
 import StudyLog from '../Schema/StudyLog.js'
 import User from '../Schema/User.js'
+import { notifyUserEvent } from '../utils/notificationService.js'
 
 const normalizeDate = (value) => {
   const date = new Date(value)
@@ -22,6 +23,8 @@ export const createStudyLog = async (req, res) => {
 
     const user = await User.findById(req.user)
     if (user) {
+      const previousLevel = user.level || 1
+      const previousStreak = user.streakCount || 0
       const logDate = normalizeDate(studyLog.date || new Date())
       const today = normalizeDate(new Date())
 
@@ -41,6 +44,20 @@ export const createStudyLog = async (req, res) => {
           } else if (diff > 1) {
             user.streakCount = 1
             bonusXp = 10
+
+            void notifyUserEvent({
+              userId: user._id,
+              email: user.email,
+              username: user.name,
+              type: 'streak_broken',
+              message: 'Streak broken. Complete at least one focused task daily to recover quickly.',
+              sendEmail: true,
+              additionalData: {
+                eventKey: `streak-break-${logDate.toISOString().slice(0, 10)}`,
+                streakCount: previousStreak,
+                reinforcementSuggestion: 'Complete at least one focused task daily to rebuild streak quickly.',
+              },
+            })
           }
         }
 
@@ -49,6 +66,36 @@ export const createStudyLog = async (req, res) => {
           user.level = Math.floor((user.xp || 0) / 200) + 1
           user.lastActiveDate = logDate
           await user.save()
+
+          if ((user.streakCount || 0) > previousStreak) {
+            void notifyUserEvent({
+              userId: user._id,
+              email: user.email,
+              username: user.name,
+              type: 'streak_update',
+              message: `Streak increased to ${user.streakCount || 0} day(s).`,
+              sendEmail: false,
+              additionalData: {
+                eventKey: `streak-update-${logDate.toISOString().slice(0, 10)}`,
+                streakCount: user.streakCount || 0,
+              },
+            })
+          }
+
+          if ((user.level || 1) > previousLevel) {
+            void notifyUserEvent({
+              userId: user._id,
+              email: user.email,
+              username: user.name,
+              type: 'level_up',
+              message: `Level up! You reached Level ${user.level || 1}.`,
+              sendEmail: true,
+              additionalData: {
+                eventKey: `level-up-${user.level}`,
+                newLevel: user.level || 1,
+              },
+            })
+          }
         }
       }
     }

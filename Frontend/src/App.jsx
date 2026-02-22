@@ -1,19 +1,22 @@
 import './App.css'
-import { useMemo, useState } from 'react'
+import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useOutletContext } from 'react-router-dom'
 import {
+  AlertCircle,
   Brain,
   ClipboardList,
   Flame,
   Gauge,
+  Link2,
+  Rocket,
   Sparkles,
   Target,
   TrendingUp,
   Trophy,
+  Zap,
 } from 'lucide-react'
 import { Home } from './Component/Home'
 import ProtectedRoute from './components/ProtectedRoute'
-import AnalyticsCharts from './components/AnalyticsCharts'
 import DashboardLayout from './components/DashboardLayout'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
@@ -21,10 +24,12 @@ import { api } from './utils/api'
 import { useToast } from './context/ToastContext'
 import { Whattodo } from './Component/whattodo'
 
+const AnalyticsCharts = lazy(() => import('./components/AnalyticsCharts'))
+
 const card =
   'rounded-2xl border border-white/10 bg-neutral-900/70 backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,.35)]'
 
-const Metric = ({ title, value, hint, icon: Icon }) => (
+const Metric = memo(({ title, value, hint, icon: Icon }) => (
   <article className={`${card} p-4`}>
     <div className="flex items-center justify-between">
       <p className="text-xs uppercase tracking-widest text-neutral-400">{title}</p>
@@ -33,7 +38,79 @@ const Metric = ({ title, value, hint, icon: Icon }) => (
     <h3 className="mt-3 text-2xl font-bold">{value}</h3>
     <p className="text-sm text-neutral-400">{hint}</p>
   </article>
-)
+))
+
+const AI_MESSAGES = [
+  'Analyzing your skill progress...',
+  'Evaluating completion patterns...',
+  'Detecting skill gaps...',
+  'Applying reinforcement logic...',
+  'Optimizing workload balance...',
+  'Calculating success probability...',
+  'Generating adaptive roadmap...',
+]
+
+const MIN_ROADMAP_LOADING_MS = 600
+const ROADMAP_DEBOUNCE_MS = 300
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const notificationStyleMap = {
+  reminder: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-100',
+  streak: 'border-orange-500/30 bg-orange-500/10 text-orange-100',
+  levelup: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
+  default: 'border-blue-500/30 bg-blue-500/10 text-blue-100',
+}
+
+const notificationIconMap = {
+  reminder: AlertCircle,
+  streak: Zap,
+  levelup: Trophy,
+  default: Rocket,
+}
+
+const RoadmapLoadingPanel = memo(() => {
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0)
+  const [fakeProgress, setFakeProgress] = useState(3)
+
+  useEffect(() => {
+    const messageInterval = setInterval(() => {
+      setCurrentMessageIndex((prev) => (prev + 1) % AI_MESSAGES.length)
+    }, 2500)
+
+    const progressInterval = setInterval(() => {
+      setFakeProgress((prev) => Math.min(95, prev + 3 + Math.random() * 4))
+    }, 900)
+
+    return () => {
+      clearInterval(messageInterval)
+      clearInterval(progressInterval)
+    }
+  }, [])
+
+  return (
+    <div className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-4">
+      <div className="flex items-center gap-2">
+        <Sparkles size={16} className="text-cyan-300" />
+        <p className="text-sm text-cyan-100">{AI_MESSAGES[currentMessageIndex]}</p>
+        <div className="inline-flex items-center gap-1 pl-1">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
+        </div>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 transition-all duration-300"
+          style={{ width: `${Math.max(3, Math.min(100, fakeProgress))}%` }}
+        />
+      </div>
+      <p className="mt-2 text-xs text-cyan-200/80">
+        AI is building your adaptive weekly plan using your latest performance signals.
+      </p>
+    </div>
+  )
+})
 
 const OverviewPage = () => {
   const { metrics, productivity } = useOutletContext()
@@ -322,9 +399,11 @@ const SkillsPage = () => {
 const AnalyticsPage = () => {
   const { tasks, skills, studyLogs, productivity, metrics } = useOutletContext()
   const weekly = productivity.slice(0, 7).reverse()
-  const weakestSkill = [...skills].sort(
-    (a, b) => (a.progressPercentage || 0) - (b.progressPercentage || 0)
-  )[0]
+  const weakestSkill = useMemo(
+    () =>
+      [...skills].sort((a, b) => (a.progressPercentage || 0) - (b.progressPercentage || 0))[0],
+    [skills]
+  )
 
   const xpGrowth = useMemo(() => {
     const completed = tasks
@@ -342,6 +421,7 @@ const AnalyticsPage = () => {
       }
     })
   }, [tasks])
+  const shouldRenderCharts = tasks.length > 0 || productivity.length > 0 || xpGrowth.length > 0
 
   return (
     <section className="space-y-4">
@@ -392,47 +472,244 @@ const AnalyticsPage = () => {
         </p>
       </div>
 
-      <AnalyticsCharts tasks={tasks} productivity={productivity} xpGrowth={xpGrowth} />
+      {shouldRenderCharts ? (
+        <Suspense
+          fallback={
+            <div className={`${card} p-4 text-sm text-neutral-400`}>Loading analytics visuals...</div>
+          }
+        >
+          <AnalyticsCharts tasks={tasks} productivity={productivity} xpGrowth={xpGrowth} />
+        </Suspense>
+      ) : (
+        <div className={`${card} p-4 text-sm text-neutral-400`}>
+          Add activity data to unlock analytics visuals.
+        </div>
+      )}
     </section>
   )
 }
 
 const RoadmapPage = () => {
-  const { roadmap, setRoadmap, refreshAll } = useOutletContext()
+  const {
+    roadmap,
+    setRoadmap,
+    optimizationMeta,
+    setOptimizationMeta,
+    analysisSummary,
+    setAnalysisSummary,
+    chartData,
+    setChartData,
+    refreshAll,
+  } = useOutletContext()
   const { addToast } = useToast()
   const [loading, setLoading] = useState(false)
+  const [generateError, setGenerateError] = useState('')
+  const debounceRef = useRef(null)
+  const mountedRef = useRef(true)
+  const inFlightRef = useRef(false)
 
-  const generateRoadmap = async () => {
-    setLoading(true)
-    const response = await api.post('/api/generate-roadmap', {})
-    setLoading(false)
-
-    if (!response.ok) {
-      return addToast({
-        type: 'error',
-        title: 'Roadmap Error',
-        message: response.data?.message || 'Could not generate roadmap.',
-      })
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      if (debounceRef.current) clearTimeout(debounceRef.current)
     }
+  }, [])
 
-    const roadmapData = Array.isArray(response.data?.roadmap)
-      ? response.data.roadmap
-      : response.data?.roadmap?.weeklyPlan || []
+  const notificationStyle = useCallback(
+    (type) => notificationStyleMap[type] || notificationStyleMap.default,
+    []
+  )
 
-    setRoadmap(roadmapData)
-    refreshAll({ quiet: true })
+  const notificationIcon = useCallback((type) => {
+    const Icon = notificationIconMap[type] || notificationIconMap.default
+    return <Icon size={14} />
+  }, [])
 
-    addToast({
-      type: response.data?.isStarter ? 'info' : 'success',
-      title: response.data?.isStarter ? 'Starter Roadmap Ready' : 'Adaptive Roadmap Ready',
-      message: response.data?.isStarter
-        ? 'No productivity history yet, so a creative starter roadmap was generated.'
-        : 'Roadmap updated from your latest productivity and skill signals.',
-    })
-  }
+  const generateRoadmap = useCallback(async () => {
+    if (inFlightRef.current) return
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    debounceRef.current = setTimeout(async () => {
+      if (inFlightRef.current || !mountedRef.current) return
+      inFlightRef.current = true
+
+      setGenerateError('')
+      setLoading(true)
+      const startedAt = Date.now()
+      let response = null
+
+      try {
+        response = await api.post('/api/generate-roadmap', {})
+      } catch (error) {
+        if (!mountedRef.current) return
+        setLoading(false)
+        inFlightRef.current = false
+        const message = error?.message || 'Could not generate roadmap. Please retry.'
+        setGenerateError(message)
+        addToast({
+          type: 'error',
+          title: 'Roadmap Error',
+          message,
+        })
+        return
+      } finally {
+        const elapsed = Date.now() - startedAt
+        if (elapsed < MIN_ROADMAP_LOADING_MS) {
+          await wait(MIN_ROADMAP_LOADING_MS - elapsed)
+        }
+      }
+
+      if (!mountedRef.current) return
+      setLoading(false)
+      inFlightRef.current = false
+
+      if (!response.ok) {
+        setGenerateError(response.data?.message || 'Could not generate roadmap. Please retry.')
+        return addToast({
+          type: 'error',
+          title: 'Roadmap Error',
+          message: response.data?.message || 'Could not generate roadmap.',
+        })
+      }
+
+      const roadmapData = Array.isArray(response.data?.roadmap)
+        ? response.data.roadmap
+        : response.data?.roadmap?.weeklyPlan || []
+
+      setRoadmap(roadmapData)
+      setOptimizationMeta(response.data?.optimizationMeta || null)
+      setAnalysisSummary(response.data?.analysisSummary || null)
+      setChartData(response.data?.chartData || null)
+      refreshAll({ quiet: true })
+
+      addToast({
+        type: response.data?.isStarter ? 'info' : 'success',
+        title: response.data?.isStarter ? 'Starter Roadmap Ready' : 'Adaptive Roadmap Ready',
+        message: response.data?.isStarter
+          ? 'No productivity history yet, so a creative starter roadmap was generated.'
+          : 'Roadmap updated from your latest productivity and skill signals.',
+      })
+    }, ROADMAP_DEBOUNCE_MS)
+  }, [addToast, refreshAll, setAnalysisSummary, setChartData, setOptimizationMeta, setRoadmap])
 
   return (
     <section className="space-y-4">
+      {optimizationMeta ? (
+        <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-emerald-300">Optimization Summary</p>
+              <div className="mt-1 inline-flex rounded-full border border-emerald-400/40 bg-emerald-400/10 px-2 py-1 text-xs text-emerald-200">
+                {optimizationMeta.version || 'initial'}
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-emerald-200/80">Predicted Success Rate</p>
+              <p className="text-3xl font-black text-emerald-300">
+                {Number.isFinite(Number(optimizationMeta.predictedSuccessRate))
+                  ? `${Math.round(Number(optimizationMeta.predictedSuccessRate))}%`
+                  : '--'}
+              </p>
+            </div>
+          </div>
+          {optimizationMeta.improvementStrategy ? (
+            <p className="mt-3 text-sm text-emerald-100/90">{optimizationMeta.improvementStrategy}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {analysisSummary ? (
+        <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4">
+          <p className="text-xs uppercase tracking-wider text-blue-300">Performance Intelligence</p>
+          <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+              <p className="text-neutral-400">Roadmap Completion</p>
+              <p className="text-lg font-bold text-blue-200">
+                {Number.isFinite(Number(analysisSummary.roadmapCompletionRate))
+                  ? `${Math.round(Number(analysisSummary.roadmapCompletionRate))}%`
+                  : '--'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+              <p className="text-neutral-400">Tasks Missed</p>
+              <p className="text-lg font-bold text-blue-200">{analysisSummary.tasksMissed ?? 0}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+              <p className="text-neutral-400">Most Skipped Focus</p>
+              <p className="text-blue-100">{analysisSummary.mostSkippedFocus || 'None'}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+              <p className="text-neutral-400">Streak Status</p>
+              <p className="text-blue-100 capitalize">{analysisSummary.streakStatus || 'stable'}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+              <p className="text-neutral-400">Performance Trend</p>
+              <p className="text-blue-100 capitalize">{analysisSummary.performanceTrend || 'stable'}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+              <p className="text-neutral-400">Reinforcement Action</p>
+              <p className="text-blue-100 capitalize">{analysisSummary.reinforcementAction || 'reward'}</p>
+            </div>
+          </div>
+          {Array.isArray(analysisSummary.repeatedGapSkills) && analysisSummary.repeatedGapSkills.length ? (
+            <p className="mt-3 text-sm text-blue-100">
+              Repeated Gap Skills: {analysisSummary.repeatedGapSkills.join(', ')}
+            </p>
+          ) : null}
+          {analysisSummary.improvementReason ? (
+            <p className="mt-2 text-sm text-blue-100/90">{analysisSummary.improvementReason}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {chartData ? (
+        <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+          <p className="text-xs uppercase tracking-wider text-cyan-300">Chart-ready Metrics</p>
+          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <p className="text-xs text-neutral-400">Daily Completion</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                {(chartData.dailyCompletion || []).map((item, idx) => (
+                  <span key={idx} className="rounded-full border border-white/15 bg-white/5 px-2 py-1">
+                    {item.day}: {item.value}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <p className="text-xs text-neutral-400">XP Trend</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                {(chartData.xpTrend || []).map((item, idx) => (
+                  <span key={idx} className="rounded-full border border-white/15 bg-white/5 px-2 py-1">
+                    {item.day}: {item.xp} XP
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <p className="text-xs text-neutral-400">Skill Gap Radar</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                {(chartData.skillGapRadar || []).map((item, idx) => (
+                  <span key={idx} className="rounded-full border border-white/15 bg-white/5 px-2 py-1">
+                    {item.skill}: {Math.round(Number(item.gapScore || 0))}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/30 p-3">
+              <p className="text-xs text-neutral-400">Adaptive Trend</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                {(chartData.adaptiveTrend || []).map((item, idx) => (
+                  <span key={idx} className="rounded-full border border-white/15 bg-white/5 px-2 py-1">
+                    {item.focusTopic}: {Math.round(Number(item.adaptiveScore || 0))}%
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className={`${card} p-4`}>
         <h1 className="text-2xl font-bold md:text-3xl">AI Roadmap</h1>
         <p className="mt-2 text-sm text-neutral-400">
@@ -446,6 +723,14 @@ const RoadmapPage = () => {
         >
           {loading ? 'Generating...' : 'Regenerate'}
         </button>
+
+        {loading ? <RoadmapLoadingPanel /> : null}
+
+        {generateError ? (
+          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {generateError}
+          </div>
+        ) : null}
       </div>
 
       {Array.isArray(roadmap) && roadmap.length ? (
@@ -466,6 +751,53 @@ const RoadmapPage = () => {
                 <li key={taskIndex}>{task}</li>
               ))}
             </ul>
+
+            {Number.isFinite(Number(item.adaptiveScore)) ? (
+              <div className="mt-3">
+                <div className="flex items-center justify-between text-xs text-neutral-300">
+                  <span>Adaptive Score</span>
+                  <span>{Math.round(Number(item.adaptiveScore))}%</span>
+                </div>
+                <div className="mt-1 h-2 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, Number(item.adaptiveScore)))}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {item.youtubeSuggestion?.url ? (
+              <a
+                href={item.youtubeSuggestion.url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-200 hover:bg-blue-500/20"
+              >
+                <Link2 size={14} />
+                Watch Learning Resource
+              </a>
+            ) : null}
+
+            {Array.isArray(item.notifications) && item.notifications.length ? (
+              <div className="mt-3 space-y-2">
+                {item.notifications.map((note, noteIndex) => (
+                  <div
+                    key={noteIndex}
+                    className={`rounded-lg border px-3 py-2 text-xs ${notificationStyle(note.type)}`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="mt-0.5">{notificationIcon(note.type)}</span>
+                      <div>
+                        <p className="font-medium">{note.message || 'Notification'}</p>
+                        <p className="opacity-80">{note.triggerCondition || ''}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             <p className="mt-3 text-xs text-neutral-400">{item.motivationalMessage}</p>
           </article>
         ))
@@ -672,4 +1004,3 @@ const App = () => (
 )
 
 export default App
-

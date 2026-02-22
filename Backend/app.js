@@ -8,6 +8,8 @@ import studyLogRoutes from './Routes/studyLogRoutes.js';
 import productivityRoutes from './Routes/productivityRoutes.js';
 import skillRoutes from './Routes/skillRoutes.js';
 import roadmapRoutes from './Routes/roadmapRoutes.js';
+import { initEmailScheduler } from './Scheduler/emailScheduler.js';
+import { initEmailServiceHealth } from './utils/emailService.js';
 
 dotenv.config();
 
@@ -27,6 +29,13 @@ await connectDB().catch((error) => {
   console.error('Database connection failed:', error);
   process.exit(1);
 });
+
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  console.warn('Email config warning: EMAIL_USER or EMAIL_PASS is missing.');
+}
+
+await initEmailServiceHealth();
+await initEmailScheduler();
 
 app.use(authRoutes);
 app.use(taskRoutes);

@@ -1,5 +1,6 @@
 import Task from "../Schema/Task.js";
 import User from "../Schema/User.js";
+import { notifyUserEvent } from "../utils/notificationService.js";
 
 const calculatePriorityScore = (weaknessLevel, deadline) => {
   const now = new Date();
@@ -60,6 +61,25 @@ export const createTask = async (req, res) => {
       status: status || "pending",
     });
 
+    const user = await User.findById(req.user).select("name email");
+    if (user) {
+      void notifyUserEvent({
+        userId: user._id,
+        email: user.email,
+        username: user.name,
+        type: "task_added",
+        message: `New task added: ${task.title} (${task.subject}).`,
+        sendEmail: true,
+        additionalData: {
+          eventKey: `task-added-${task._id.toString()}`,
+          taskId: task._id.toString(),
+          taskTitle: task.title,
+          focusArea: task.subject,
+          forceEmail: true,
+        },
+      });
+    }
+
     return res.status(201).json(task);
   } catch {
     return res.status(500).json({ message: "Server error" });
@@ -98,6 +118,8 @@ export const updateTask = async (req, res) => {
     if (markAsCompleted && !taskToUpdate.xpAwarded) {
       const user = await User.findById(req.user);
       if (user) {
+        const previousLevel = user.level || 1;
+        const previousStreak = user.streakCount || 0;
         const effectiveDifficulty = updates.difficulty || taskToUpdate.difficulty || "easy";
         const baseXp = difficultyXpMap[effectiveDifficulty] || 20;
         const { streakCount, bonusXp } = calculateStreakAndBonus(user);
@@ -110,6 +132,54 @@ export const updateTask = async (req, res) => {
         await user.save();
 
         updates.xpAwarded = true;
+
+        void notifyUserEvent({
+          userId: user._id,
+          email: user.email,
+          username: user.name,
+          type: "task_complete",
+          message: `Task completed: ${taskToUpdate.title}. You earned ${totalXpGain} XP.`,
+          sendEmail: totalXpGain >= 100,
+          additionalData: {
+            taskId: taskToUpdate._id.toString(),
+            taskTitle: taskToUpdate.title,
+            xpEarned: totalXpGain,
+            streakCount: user.streakCount || 0,
+            eventKey: `task-complete-${taskToUpdate._id.toString()}`,
+            forceEmail: totalXpGain >= 100,
+          },
+        });
+
+        if ((user.streakCount || 0) > previousStreak) {
+          void notifyUserEvent({
+            userId: user._id,
+            email: user.email,
+            username: user.name,
+            type: "streak_update",
+            message: `Streak increased to ${user.streakCount || 0} day(s).`,
+            sendEmail: false,
+            additionalData: {
+              eventKey: `streak-update-${new Date().toISOString().slice(0, 10)}`,
+              streakCount: user.streakCount || 0,
+            },
+          });
+        }
+
+        if ((user.level || 1) > previousLevel) {
+          void notifyUserEvent({
+            userId: user._id,
+            email: user.email,
+            username: user.name,
+            type: "level_up",
+            message: `Level up! You reached Level ${user.level || 1}.`,
+            sendEmail: true,
+            additionalData: {
+              eventKey: `level-up-${user.level}`,
+              newLevel: user.level || 1,
+              xpEarned: totalXpGain,
+            },
+          });
+        }
       }
     }
 

@@ -1,107 +1,94 @@
-import { motion } from "framer-motion";
-import {
-  UserPlus,
-  ListTodo,
-  CheckCircle2,
-  BarChart3,
-  Sparkles,
-  Rocket,
-  Flame
-} from "lucide-react";
+import { memo, useMemo } from 'react'
+import { motion } from 'framer-motion'
+import { BarChart3, CheckCircle2, Flame, ListTodo, Rocket, Sparkles, UserPlus } from 'lucide-react'
 
-export const Whattodo = () => {
-  const steps = [
-    {
-      icon: <UserPlus size={28} />,
-      title: "1. Set Your Goal",
-      desc: "Choose your target role and define your daily available learning hours to initialize your growth journey.",
-    },
-    {
-      icon: <ListTodo size={28} />,
-      title: "2. Create Daily Tasks",
-      desc: "Add structured tasks with difficulty level, estimated hours, and planned date for smart productivity tracking.",
-    },
-    {
-      icon: <CheckCircle2 size={28} />,
-      title: "3. Complete & Earn XP",
-      desc: "Mark tasks as completed to gain XP, level up, and maintain your daily streak consistency.",
-    },
-    {
-      icon: <BarChart3 size={28} />,
-      title: "4. Track Analytics",
-      desc: "Visualize your day-wise productivity, XP growth, and task performance through dynamic charts.",
-    },
-    {
-      icon: <Sparkles size={28} />,
-      title: "5. Generate AI Roadmap",
-      desc: "Let AI create a personalized 7-day plan based on your progress, weaknesses, and available time.",
-    },
-    {
-      icon: <Rocket size={28} />,
-      title: "6. Level Up Continuously",
-      desc: "Use gamification — XP, streaks, levels — to continuously improve and stay motivated.",
-    },
-  ];
+const Whattodo = () => {
+  const steps = useMemo(
+    () => [
+      {
+        icon: UserPlus,
+        title: '1. Set Your Goal',
+        desc: 'Choose your target role and define your daily available learning hours to initialize your growth journey.',
+      },
+      {
+        icon: ListTodo,
+        title: '2. Create Daily Tasks',
+        desc: 'Add structured tasks with difficulty level, estimated hours, and planned date for smart productivity tracking.',
+      },
+      {
+        icon: CheckCircle2,
+        title: '3. Complete & Earn XP',
+        desc: 'Mark tasks as completed to gain XP, level up, and maintain your daily streak consistency.',
+      },
+      {
+        icon: BarChart3,
+        title: '4. Track Analytics',
+        desc: 'Visualize your day-wise productivity, XP growth, and task performance through dynamic charts.',
+      },
+      {
+        icon: Sparkles,
+        title: '5. Generate AI Roadmap',
+        desc: 'Let AI create a personalized 7-day plan based on your progress, weaknesses, and available time.',
+      },
+      {
+        icon: Rocket,
+        title: '6. Level Up Continuously',
+        desc: 'Use gamification - XP, streaks, levels - to continuously improve and stay motivated.',
+      },
+    ],
+    []
+  )
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white px-6 py-16">
-
-      {/* HEADER */}
-      <div className="text-center mb-16">
-        <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+    <div className="min-h-screen bg-[#0a0a0a] px-6 py-16 text-white">
+      <div className="mb-16 text-center">
+        <h1 className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-4xl font-bold text-transparent md:text-6xl">
           Your Growth Blueprint
         </h1>
-        <p className="text-gray-400 mt-4 max-w-2xl mx-auto">
+        <p className="mx-auto mt-4 max-w-2xl text-gray-400">
           Follow these intelligent steps to transform your daily efforts into measurable growth.
         </p>
       </div>
 
-      {/* STEPS GRID */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-10 max-w-7xl mx-auto">
+      <div className="mx-auto grid max-w-7xl gap-10 md:grid-cols-2 lg:grid-cols-3">
+        {steps.map((step, index) => {
+          const Icon = step.icon
 
-        {steps.map((step, index) => (
-          <motion.div
-            key={index}
-            whileHover={{ scale: 1.04 }}
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 relative overflow-hidden group"
-          >
-            {/* Glow Effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-purple-600/10 opacity-0 group-hover:opacity-100 transition duration-500 blur-2xl"></div>
+          return (
+            <motion.article
+              key={step.title}
+              initial={{ opacity: 0, y: 22 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-60px' }}
+              transition={{ duration: 0.3, delay: index * 0.04 }}
+              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-8 backdrop-blur-md"
+            >
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-cyan-500/10 to-purple-600/10 opacity-0 transition duration-200 group-hover:opacity-100" />
 
-            <div className="relative z-10">
+              <div className="relative z-10">
+                <div className="mb-6 text-cyan-400">
+                  <Icon size={28} />
+                </div>
 
-              <div className="text-cyan-400 mb-6">
-                {step.icon}
+                <h3 className="mb-4 text-xl font-semibold">{step.title}</h3>
+
+                <p className="text-sm leading-relaxed text-gray-400">{step.desc}</p>
               </div>
-
-              <h3 className="text-xl font-semibold mb-4">
-                {step.title}
-              </h3>
-
-              <p className="text-gray-400 leading-relaxed text-sm">
-                {step.desc}
-              </p>
-
-            </div>
-          </motion.div>
-        ))}
-
+            </motion.article>
+          )
+        })}
       </div>
 
-      {/* MOTIVATION SECTION */}
       <div className="mt-24 text-center">
-        <div className="flex justify-center items-center gap-3 text-orange-400 text-lg font-semibold">
+        <div className="flex items-center justify-center gap-3 text-lg font-semibold text-orange-400">
           <Flame />
           Stay Consistent. Build Momentum.
         </div>
-        <p className="text-gray-500 mt-2">
-          Small disciplined actions compound into massive success.
-        </p>
+        <p className="mt-2 text-gray-500">Small disciplined actions compound into massive success.</p>
       </div>
-
     </div>
-  );
-};
+  )
+}
+
+export default memo(Whattodo)
+export { Whattodo }

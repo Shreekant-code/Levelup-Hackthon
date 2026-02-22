@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
 import {
   Bell,
@@ -19,7 +19,7 @@ import { useToast } from '../context/ToastContext'
 import { api } from '../utils/api'
 
 const card =
-  'rounded-2xl border border-white/10 bg-neutral-900/70 backdrop-blur-xl shadow-[0_0_30px_rgba(0,0,0,.35)]'
+  'rounded-2xl border border-white/10 bg-neutral-900/70 backdrop-blur-md shadow-[0_0_24px_rgba(0,0,0,.35)]'
 
 const dayKey = (dateValue) => {
   const date = new Date(dateValue)
@@ -42,6 +42,8 @@ const calculateStreakFromLogs = (logs) => {
 const useDashboardData = () => {
   const { addToast } = useToast()
   const { user, refreshProfile } = useAuth()
+  const mountedRef = useRef(true)
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [tasks, setTasks] = useState([])
@@ -49,41 +51,67 @@ const useDashboardData = () => {
   const [studyLogs, setStudyLogs] = useState([])
   const [productivity, setProductivity] = useState([])
   const [roadmap, setRoadmap] = useState([])
+  const [optimizationMeta, setOptimizationMeta] = useState(null)
+  const [analysisSummary, setAnalysisSummary] = useState(null)
+  const [chartData, setChartData] = useState(null)
 
-  const refreshAll = async ({ quiet = false } = {}) => {
-    setLoading(true)
-    setError('')
-
-    const [taskRes, skillRes, studyRes, productivityRes] = await Promise.all([
-      api.get('/api/tasks'),
-      api.get('/api/skills'),
-      api.get('/api/study-log'),
-      api.get('/api/productivity'),
-    ])
-
-    setLoading(false)
-
-    const failed = [taskRes, skillRes, studyRes, productivityRes].find((response) => !response.ok)
-    if (failed) {
-      const message = failed.data?.message || 'Failed to sync dashboard data.'
-      setError(message)
-      if (!quiet) {
-        addToast({ type: 'error', title: 'Sync Error', message })
-      }
-      return
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
     }
+  }, [])
 
-    setTasks(taskRes.data || [])
-    setSkills(skillRes.data || [])
-    setStudyLogs(studyRes.data || [])
-    setProductivity(productivityRes.data || [])
+  const refreshAll = useCallback(
+    async ({ quiet = false } = {}) => {
+      if (!mountedRef.current) return
+      setLoading(true)
+      setError('')
 
-    await refreshProfile()
-  }
+      try {
+        const [taskRes, skillRes, studyRes, productivityRes] = await Promise.all([
+          api.get('/api/tasks'),
+          api.get('/api/skills'),
+          api.get('/api/study-log'),
+          api.get('/api/productivity'),
+        ])
+
+        if (!mountedRef.current) return
+
+        setLoading(false)
+
+        const failed = [taskRes, skillRes, studyRes, productivityRes].find((response) => !response.ok)
+        if (failed) {
+          const message = failed.data?.message || 'Failed to sync dashboard data.'
+          setError(message)
+          if (!quiet) {
+            addToast({ type: 'error', title: 'Sync Error', message })
+          }
+          return
+        }
+
+        setTasks(taskRes.data || [])
+        setSkills(skillRes.data || [])
+        setStudyLogs(studyRes.data || [])
+        setProductivity(productivityRes.data || [])
+
+        await refreshProfile()
+      } catch (err) {
+        if (!mountedRef.current) return
+        setLoading(false)
+        const message = err?.message || 'Failed to sync dashboard data.'
+        setError(message)
+        if (!quiet) {
+          addToast({ type: 'error', title: 'Sync Error', message })
+        }
+      }
+    },
+    [addToast, refreshProfile]
+  )
 
   useEffect(() => {
     refreshAll({ quiet: true })
-  }, [])
+  }, [refreshAll])
 
   const completedTasks = useMemo(
     () => tasks.filter((task) => task.status === 'completed').length,
@@ -167,6 +195,12 @@ const useDashboardData = () => {
     productivity,
     roadmap,
     setRoadmap,
+    optimizationMeta,
+    setOptimizationMeta,
+    analysisSummary,
+    setAnalysisSummary,
+    chartData,
+    setChartData,
     refreshAll,
     metrics: {
       completionRate,
@@ -189,33 +223,40 @@ const DashboardLayout = () => {
   const data = useDashboardData()
   const [open, setOpen] = useState(false)
 
-  const navItems = [
-    { to: '/dashboard', label: 'Overview', icon: LayoutDashboard, end: true },
-    { to: '/dashboard/tasks', label: 'Tasks', icon: ListTodo },
-    { to: '/dashboard/skills', label: 'Skills', icon: Brain },
-    { to: '/dashboard/analytics', label: 'Analytics', icon: Gauge },
-    { to: '/dashboard/roadmap', label: 'AI Roadmap', icon: Sparkles },
-    { to: '/dashboard/study-log', label: 'Study Log', icon: ClipboardList },
-    { to: '/dashboard/gamification', label: 'Gamification', icon: Medal },
-    { to: '/dashboard/notifications', label: 'Notifications', icon: Bell },
-  ]
+  const navItems = useMemo(
+    () => [
+      { to: '/dashboard', label: 'Overview', icon: LayoutDashboard, end: true },
+      { to: '/dashboard/tasks', label: 'Tasks', icon: ListTodo },
+      { to: '/dashboard/skills', label: 'Skills', icon: Brain },
+      { to: '/dashboard/analytics', label: 'Analytics', icon: Gauge },
+      { to: '/dashboard/roadmap', label: 'AI Roadmap', icon: Sparkles },
+      { to: '/dashboard/study-log', label: 'Study Log', icon: ClipboardList },
+      { to: '/dashboard/gamification', label: 'Gamification', icon: Medal },
+      { to: '/dashboard/notifications', label: 'Notifications', icon: Bell },
+    ],
+    []
+  )
 
-  const handleLogout = () => {
+  const toggleOpen = useCallback(() => {
+    setOpen((current) => !current)
+  }, [])
+
+  const handleLogout = useCallback(() => {
     logout()
     navigate('/', { replace: true })
-  }
+  }, [logout, navigate])
 
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-dvh overflow-x-hidden bg-black text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(56,189,248,0.13),transparent_35%),radial-gradient(circle_at_75%_20%,rgba(168,85,247,0.14),transparent_40%)]" />
 
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-black/80 backdrop-blur-md">
         <div className="relative mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <button
               type="button"
               className="rounded-lg border border-white/10 bg-neutral-900/70 p-2 md:hidden"
-              onClick={() => setOpen((current) => !current)}
+              onClick={toggleOpen}
             >
               {open ? <X size={18} /> : <Menu size={18} />}
             </button>
@@ -247,8 +288,12 @@ const DashboardLayout = () => {
           onLogout={handleLogout}
         />
 
-        <main className={`${card} min-h-[70vh] p-4 md:p-5`}>
-          {data.loading ? <p className="mb-3 text-sm text-neutral-400">Syncing dashboard data...</p> : null}
+        <main className={`${card} relative min-h-[70vh] p-4 md:p-5`}>
+          {data.loading ? (
+            <div className="pointer-events-none absolute right-4 top-4 rounded-lg border border-white/10 bg-black/45 px-3 py-1 text-xs text-neutral-300 backdrop-blur-sm">
+              Syncing dashboard data...
+            </div>
+          ) : null}
           {data.error ? (
             <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
               {data.error}
@@ -263,4 +308,3 @@ const DashboardLayout = () => {
 }
 
 export default DashboardLayout
-

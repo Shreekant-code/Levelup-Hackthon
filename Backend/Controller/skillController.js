@@ -1,4 +1,6 @@
 import Skill from "../Schema/Skill.js";
+import User from "../Schema/User.js";
+import { notifyUserEvent } from "../utils/notificationService.js";
 
 export const createSkill = async (req, res) => {
   try {
@@ -14,6 +16,23 @@ export const createSkill = async (req, res) => {
       ...(typeof level === "number" ? { level } : {}),
       ...(typeof progressPercentage === "number" ? { progressPercentage } : {}),
     });
+
+    const user = await User.findById(req.user).select("name email");
+    if (user) {
+      void notifyUserEvent({
+        userId: user._id,
+        email: user.email,
+        username: user.name,
+        type: "skill_added",
+        message: `New skill added: ${skill.skillName}.`,
+        sendEmail: true,
+        additionalData: {
+          eventKey: `skill-added-${skill._id.toString()}`,
+          skillName: skill.skillName,
+          forceEmail: true,
+        },
+      });
+    }
 
     return res.status(201).json(skill);
   } catch {
@@ -47,6 +66,26 @@ export const updateSkill = async (req, res) => {
 
     if (!skill) {
       return res.status(404).json({ message: "Skill not found" });
+    }
+
+    if (typeof progressPercentage === "number") {
+      const user = await User.findById(req.user).select("name email");
+      if (user) {
+        void notifyUserEvent({
+          userId: user._id,
+          email: user.email,
+          username: user.name,
+          type: "skill_progress_updated",
+          message: `${skill.skillName} updated to ${progressPercentage}% progress.`,
+          sendEmail: true,
+          additionalData: {
+            eventKey: `skill-progress-${skill._id.toString()}-${progressPercentage}`,
+            skillName: skill.skillName,
+            progressPercentage,
+            forceEmail: true,
+          },
+        });
+      }
     }
 
     return res.status(200).json(skill);
